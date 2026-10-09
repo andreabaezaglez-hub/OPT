@@ -1,0 +1,67 @@
+services:
+  # Aplicacion web Ghost
+  ghost:
+    image: ghost:6-alpine
+    container_name: ghost
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:2368"
+    environment:
+      NODE_ENV: production
+      url: http://172.22.64.9:8000
+      database__client: mysql
+      database__connection__host: db
+      database__connection__port: 3306
+      database__connection__user: ghostuser
+      database__connection__password_FILE: /run/secrets/db_password
+      database__connection__database: ghostdb
+    secrets:
+      - db_password
+    volumes:
+      - ghost_content:/var/lib/ghost/content
+    networks:
+      - ghost_network
+
+  # Servidor de base de datos
+  db:
+    image: mariadb
+    container_name: ghost_database
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MARIADB_DATABASE: ghostdb
+      MARIADB_USER: ghostuser
+      MARIADB_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_root_password
+      - db_password
+    volumes:
+      - database_data:/var/lib/mysql
+    networks:
+      - ghost_network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+# Volumenes persistentes
+volumes:
+  ghost_content:
+  database_data:
+
+# Red interna
+networks:
+  ghost_network:
+    driver: bridge
+
+# Secretos desde archivos locales
+secrets:
+  db_root_password:
+    file: ./db_root_password.txt
+  db_password:
+    file: ./db_password.txt
